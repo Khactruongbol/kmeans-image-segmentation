@@ -1,0 +1,10 @@
+numpy
+pillow
+matplotlib
+requests
+pandas
+pytest
+streamlit
+ipykernel
+nbformat
+scikit-learn

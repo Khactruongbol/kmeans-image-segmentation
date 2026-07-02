@@ -1,0 +1,40 @@
+{
+  "problem": "K-Means Image Segmentation on landscape images",
+  "query": "mountain landscape",
+  "source": "wikimedia",
+  "raw_images": 7,
+  "clean_images": 20,
+  "target_clean_images": 20,
+  "image_quality": {
+    "accepted_images": 20,
+    "min_width": 1280,
+    "min_height": 614,
+    "max_width": 1920,
+    "max_height": 1297
+  },
+  "k_values": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "color_spaces": [
+    "rgb",
+    "hsv",
+    "lab"
+  ],
+  "use_xy_modes": [
+    false,
+    true
+  ],
+  "metric_sample_size": 1200,
+  "model_runs": 1080,
+  "comparison_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\reports\\metrics\\model_comparison.csv",
+  "best_model_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\reports\\metrics\\best_model_by_image.json",
+  "image_label_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\data\\labels\\image_labels.csv"
+}

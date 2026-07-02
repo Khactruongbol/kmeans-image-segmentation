@@ -1,0 +1,18 @@
+{
+  "status": "passed",
+  "clean_images": 20,
+  "model_runs": 1080,
+  "expected_model_runs": 1080,
+  "alignment": "The source implements unsupervised K-Means Image Segmentation with landscape images.",
+  "checked_outputs": [
+    "raw manifest",
+    "clean manifest",
+    "image labels",
+    "pixel cluster labels",
+    "model artifacts",
+    "segmented images",
+    "side-by-side comparisons",
+    "K-grid comparisons",
+    "Jupyter notebook JSON and code-cell AST"
+  ]
+}
