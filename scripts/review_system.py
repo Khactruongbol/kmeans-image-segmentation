@@ -41,6 +41,7 @@ def validate_notebook(notebook_path: Path) -> None:
     if missing:
         raise AssertionError(f"Notebook missing sections: {missing}")
     image_refs = re.findall(r'<img src="([^"]+)"', text)
+    image_refs.extend(re.findall(r'!\[[^\]]*\]\(([^)]+)\)', text))
     if not image_refs:
         raise AssertionError("Notebook does not reference any output images")
     for image_ref in image_refs:
