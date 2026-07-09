@@ -2,15 +2,16 @@
   "problem": "K-Means Image Segmentation on landscape images",
   "query": "mountain landscape",
   "source": "wikimedia",
-  "raw_images": 7,
+  "raw_images": 22,
   "clean_images": 20,
   "target_clean_images": 20,
+  "max_augmentation": 8,
   "image_quality": {
     "accepted_images": 20,
-    "min_width": 1280,
-    "min_height": 614,
-    "max_width": 1920,
-    "max_height": 1297
+    "min_width": 720,
+    "min_height": 663,
+    "max_width": 7580,
+    "max_height": 4667
   },
   "k_values": [
     2,
@@ -36,5 +37,6 @@
   "model_runs": 1080,
   "comparison_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\reports\\metrics\\model_comparison.csv",
   "best_model_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\reports\\metrics\\best_model_by_image.json",
-  "image_label_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\data\\labels\\image_labels.csv"
+  "image_label_file": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\data\\labels\\image_labels.csv",
+  "data_balance_report": "C:\\Users\\User\\OneDrive - ut.edu.vn\\Documents\\Machine Learning - Tr\u01b0\u1eddng\\kmeans_image_segmentation\\reports\\metrics\\data_balance_report.json"
 }

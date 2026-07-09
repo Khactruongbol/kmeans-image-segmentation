@@ -23,6 +23,7 @@ def main() -> None:
     parser.add_argument("--skip-download", action="store_true")
     parser.add_argument("--queries", default="mountain landscape,forest landscape,lake landscape,beach landscape,desert landscape,sunset landscape,national park,natural scenery")
     parser.add_argument("--target-clean", type=int, default=20)
+    parser.add_argument("--max-augmentation", type=int, default=8)
     parser.add_argument("--per-query-limit", type=int, default=5)
     parser.add_argument("--use-xy-modes", default="false,true")
     parser.add_argument("--metric-sample-size", type=int, default=1500)
@@ -41,6 +42,7 @@ def main() -> None:
         skip_download=args.skip_download,
         queries=parse_color_spaces(args.queries),
         target_clean=args.target_clean,
+        max_augmentation=args.max_augmentation,
         per_query_limit=args.per_query_limit,
         use_xy_modes=parse_bool_modes(args.use_xy_modes),
         metric_sample_size=args.metric_sample_size,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
@@ -187,3 +188,141 @@ def write_clean_manifest(clean_records: list[dict], output_manifest: str | Path)
         writer.writeheader()
         for row in clean_records:
             writer.writerow({field: row.get(field, "") for field in CLEAN_FIELDS})
+
+
+def _numeric_values(records: list[dict], key: str) -> np.ndarray:
+    values = []
+    for record in records:
+        try:
+            values.append(float(record.get(key, 0) or 0))
+        except (TypeError, ValueError):
+            values.append(0.0)
+    return np.asarray(values, dtype=np.float64)
+
+
+def _outlier_flags(values: np.ndarray) -> tuple[np.ndarray, dict]:
+    if values.size == 0:
+        return np.asarray([], dtype=bool), {}
+    q1, q3 = np.percentile(values, [25, 75])
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    std = float(values.std(ddof=0))
+    mean = float(values.mean())
+    if std == 0:
+        z_flags = np.zeros(values.shape, dtype=bool)
+    else:
+        z_flags = np.abs((values - mean) / std) > 2.5
+    iqr_flags = (values < lower) | (values > upper)
+    return iqr_flags | z_flags, {
+        "mean": mean,
+        "std": std,
+        "q1": float(q1),
+        "q3": float(q3),
+        "iqr_lower": float(lower),
+        "iqr_upper": float(upper),
+    }
+
+
+def audit_and_balance_records(
+    clean_records: list[dict],
+    target_count: int,
+    max_augmentation: int,
+    output_report: str | Path,
+) -> list[dict]:
+    """Audit image-quality outliers and select a source-balanced training set."""
+    if not clean_records:
+        raise ValueError("No clean records available for balancing")
+
+    records = [dict(record) for record in clean_records]
+    for record in records:
+        width = float(record.get("width", 0) or 0)
+        height = float(record.get("height", 0) or 0)
+        record["aspect_ratio"] = round(width / max(height, 1.0), 6)
+        try:
+            record["file_size_bytes"] = Path(record.get("clean_path") or record.get("local_path")).stat().st_size
+        except OSError:
+            record["file_size_bytes"] = 0
+
+    feature_keys = ["width", "height", "aspect_ratio", "mean_intensity", "std_intensity", "file_size_bytes"]
+    stats: dict[str, dict] = {}
+    outlier_by_id: dict[str, list[str]] = {record["image_id"]: [] for record in records}
+    for key in feature_keys:
+        values = _numeric_values(records, key)
+        flags, key_stats = _outlier_flags(values)
+        stats[key] = key_stats
+        for record, flagged in zip(records, flags):
+            if flagged:
+                outlier_by_id[record["image_id"]].append(key)
+
+    non_outliers = [record for record in records if not outlier_by_id[record["image_id"]]]
+    candidate_pool = non_outliers if len(non_outliers) >= target_count else records
+    real_records = [record for record in candidate_pool if record.get("source") != "local_augmentation"]
+    aug_records = [record for record in candidate_pool if record.get("source") == "local_augmentation"]
+
+    def sort_key(record: dict) -> tuple:
+        reasons = len(outlier_by_id[record["image_id"]])
+        source_rank = 1 if record.get("source") == "local_augmentation" else 0
+        return (reasons, source_rank, str(record.get("query", "")), str(record.get("image_id", "")))
+
+    real_records = sorted(real_records, key=sort_key)
+    aug_records = sorted(aug_records, key=sort_key)
+    selected = real_records[:target_count]
+    remaining_slots = target_count - len(selected)
+    if remaining_slots > 0:
+        selected.extend(aug_records[: min(max_augmentation, remaining_slots)])
+    if len(selected) < target_count:
+        used_ids = {record["image_id"] for record in selected}
+        for record in sorted(records, key=sort_key):
+            if record["image_id"] in used_ids:
+                continue
+            selected.append(record)
+            used_ids.add(record["image_id"])
+            if len(selected) >= target_count:
+                break
+    selected = selected[:target_count]
+    selected_ids = {record["image_id"] for record in selected}
+
+    excluded = []
+    kept = []
+    for record in records:
+        entry = {
+            "image_id": record["image_id"],
+            "source": record.get("source", ""),
+            "query": record.get("query", ""),
+            "width": record.get("width", ""),
+            "height": record.get("height", ""),
+            "aspect_ratio": record.get("aspect_ratio", ""),
+            "mean_intensity": record.get("mean_intensity", ""),
+            "std_intensity": record.get("std_intensity", ""),
+            "file_size_bytes": record.get("file_size_bytes", ""),
+            "outlier_features": outlier_by_id[record["image_id"]],
+        }
+        if record["image_id"] in selected_ids:
+            kept.append(entry)
+        else:
+            excluded.append(entry)
+
+    report = {
+        "target_count": target_count,
+        "max_augmentation": max_augmentation,
+        "input_records": len(records),
+        "selected_records": len(selected),
+        "real_selected": sum(1 for record in selected if record.get("source") != "local_augmentation"),
+        "augmentation_selected": sum(1 for record in selected if record.get("source") == "local_augmentation"),
+        "feature_stats": stats,
+        "kept": kept,
+        "excluded": excluded,
+        "source_counts": {
+            source: sum(1 for record in selected if record.get("source") == source)
+            for source in sorted({record.get("source", "") for record in selected})
+        },
+        "query_counts": {
+            query: sum(1 for record in selected if record.get("query") == query)
+            for query in sorted({record.get("query", "") for record in selected})
+        },
+    }
+    output_report = Path(output_report)
+    output_report.parent.mkdir(parents=True, exist_ok=True)
+    output_report.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    return selected

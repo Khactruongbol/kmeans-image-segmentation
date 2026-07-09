@@ -13,6 +13,7 @@
     "segmented images",
     "side-by-side comparisons",
     "K-grid comparisons",
+    "data balance report",
     "Jupyter notebook JSON and code-cell AST"
   ]
 }

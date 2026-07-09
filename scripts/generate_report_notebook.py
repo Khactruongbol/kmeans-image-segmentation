@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import json
-import sys
 import uuid
 from pathlib import Path
 
+import pandas as pd
+
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT))
+
+
+def rel(path: str | Path) -> str:
+    path = Path(path)
+    if path.is_absolute():
+        try:
+            path = path.relative_to(ROOT)
+        except ValueError:
+            pass
+    return "../" + str(path).replace("\\", "/")
 
 
 def markdown_cell(source: str) -> dict:
@@ -14,186 +24,217 @@ def markdown_cell(source: str) -> dict:
         "cell_type": "markdown",
         "id": uuid.uuid4().hex[:8],
         "metadata": {},
-        "source": source.splitlines(keepends=True),
+        "source": source.strip().splitlines(keepends=True),
     }
 
 
-def code_cell(source: str) -> dict:
-    return {
-        "cell_type": "code",
-        "execution_count": None,
-        "id": uuid.uuid4().hex[:8],
-        "metadata": {},
-        "outputs": [],
-        "source": source.splitlines(keepends=True),
-    }
+def table_from_records(records: list[dict], columns: list[str], limit: int | None = None) -> str:
+    rows = records if limit is None else records[:limit]
+    header = "| " + " | ".join(columns) + " |"
+    sep = "| " + " | ".join(["---"] * len(columns)) + " |"
+    body = []
+    for row in rows:
+        body.append("| " + " | ".join(str(row.get(col, "")).replace("|", "/") for col in columns) + " |")
+    return "\n".join([header, sep, *body])
+
+
+def df_to_markdown(df: pd.DataFrame, limit: int | None = None) -> str:
+    rows = df if limit is None else df.head(limit)
+    records = rows.fillna("").to_dict("records")
+    return table_from_records(records, list(rows.columns))
+
+
+def image_tag(path: str | Path, width: int = 180) -> str:
+    return f'<img src="{rel(path)}" width="{width}">'
+
+
+def gallery_table(rows: pd.DataFrame, image_col: str, columns: list[str], width: int = 180) -> str:
+    header_cols = [*columns, "Figure"]
+    header = "| " + " | ".join(header_cols) + " |"
+    sep = "| " + " | ".join(["---"] * len(header_cols)) + " |"
+    body = []
+    for _, row in rows.iterrows():
+        values = [str(row[col]) for col in columns]
+        values.append(image_tag(row[image_col], width=width))
+        body.append("| " + " | ".join(value.replace("|", "/") for value in values) + " |")
+    return "\n".join([header, sep, *body])
 
 
 def main() -> None:
     notebook_path = ROOT / "notebooks" / "01_kmeans_image_segmentation_report.ipynb"
+    summary = json.loads((ROOT / "reports" / "metrics" / "workflow_summary.json").read_text(encoding="utf-8"))
+    review = json.loads((ROOT / "reports" / "metrics" / "source_review.json").read_text(encoding="utf-8")) if (ROOT / "reports" / "metrics" / "source_review.json").exists() else {}
+    balance = json.loads((ROOT / "reports" / "metrics" / "data_balance_report.json").read_text(encoding="utf-8"))
+    comparison = pd.read_csv(ROOT / "reports" / "metrics" / "model_comparison.csv")
+    clean = pd.read_csv(ROOT / "data" / "manifest" / "clean_landscape_manifest.csv")
+    best = comparison.sort_values("ranking_score").groupby("image_id", as_index=False).head(1)
+    all_outputs = comparison.sort_values(["image_id", "color_space", "use_xy", "k"])
+    grid_paths = sorted((ROOT / "reports" / "figures").glob("*_k_grid_*.png"))
+
+    balance_overview = {
+        "clean_images": summary["clean_images"],
+        "raw_images": summary["raw_images"],
+        "real_selected": balance["real_selected"],
+        "augmentation_selected": balance["augmentation_selected"],
+        "max_augmentation": balance["max_augmentation"],
+        "model_runs": summary["model_runs"],
+    }
+    source_counts = pd.Series(balance["source_counts"], name="count").reset_index().rename(columns={"index": "source"})
+    query_counts = pd.Series(balance["query_counts"], name="count").reset_index().rename(columns={"index": "query"})
+
     cells = [
         markdown_cell(
-            """# Final Notebook - K-Means Image Segmentation
+            f"""# Final Notebook - K-Means Image Segmentation
 
 ## 1. Define Problem
 
-The assignment asks us to segment a given image into `K` clusters using the K-Means algorithm. In this project, the input domain is landscape imagery because skies, water, forests, mountains, sand, and clouds create broad color regions that are suitable for unsupervised pixel clustering.
+The assignment requires segmenting a given image into `K` clusters using the K-Means algorithm. This project applies unsupervised pixel clustering to landscape images. Each pixel is represented by color-space features, assigned to the nearest centroid with Euclidean distance, and reconstructed by replacing the original pixel color with the centroid color.
 
-The model is not a semantic segmentation network. It does not learn object masks. Each pixel is represented by color-space features, assigned to the nearest centroid, and reconstructed using the centroid color of its cluster."""
+This report is notebook-only and contains **0 code cells**. All code execution, model training, figures, labels, metrics, and review artifacts were generated by the project scripts before this notebook was written."""
         ),
         markdown_cell(
-            """## 2. Assignment Requirement Mapping
+            """## 2. Assignment Mapping
 
-| Requirement | Implemented artifact |
+| Assignment requirement | Concrete implementation |
 |---|---|
-| Load image with PIL/OpenCV | `src/image_io.py` |
-| Convert to RGB/HSV/LAB | `convert_color_space()` |
-| Resize image | `resize_max_side()` |
-| Flatten pixels into 2D matrix | `build_pixel_features()` |
-| Initialize and update K centroids | `KMeansFromScratch` |
-| Assign pixels by Euclidean distance | vectorized NumPy distance computation |
-| Repeat until convergence | `max_iter` and `tol` |
-| Replace pixels by centroid colors | `reconstruct_segmented_image()` |
-| Visualize original and segmented images | `reports/figures/*_comparison.png` |"""
+| Load the image | `src/image_io.py` loads RGB images with PIL |
+| Convert color space | RGB, HSV, and LAB are compared |
+| Resize image | `max_side=128` for retraining efficiency |
+| Flatten pixels | each image becomes `(height * width, n_features)` |
+| Apply K-Means | NumPy implementation in `src/kmeans.py` |
+| Assign nearest centroid | vectorized Euclidean distance |
+| Update centroids | cluster means are recomputed each iteration |
+| Repeat until convergence | controlled by `max_iter` and `tol` |
+| Segment image | pixels are replaced by centroid colors |
+| Visualize result | side-by-side and K-grid figures are exported |"""
         ),
         markdown_cell(
-            """## 3. Success Metrics
+            f"""## 3. Workflow With Evidence
 
-Because there is no ground-truth segmentation mask, accuracy is measured with unsupervised internal quality metrics and visual inspection:
+The implemented workflow is:
 
-- `silhouette_sample`: higher is better.
-- `davies_bouldin_sample`: lower is better.
-- `calinski_harabasz_sample`: higher is better.
-- `inertia_per_pixel`: lower is better.
-- `cluster_balance`: higher is better when clusters are not collapsed.
-- `ranking_score`: lower is better; combines silhouette, Davies-Bouldin, inertia, and cluster balance."""
-        ),
-        code_cell(
-            """from pathlib import Path
-import json
-import pandas as pd
-from IPython.display import Image, display
-
-ROOT = Path.cwd()
-if ROOT.name != "kmeans_image_segmentation":
-    ROOT = ROOT / "kmeans_image_segmentation"
-
-summary = json.loads((ROOT / "reports" / "metrics" / "workflow_summary.json").read_text(encoding="utf-8"))
-review = json.loads((ROOT / "reports" / "metrics" / "source_review.json").read_text(encoding="utf-8"))
-comparison = pd.read_csv(ROOT / "reports" / "metrics" / "model_comparison.csv")
-image_labels = pd.read_csv(ROOT / "data" / "labels" / "image_labels.csv")
-clean_manifest = pd.read_csv(ROOT / "data" / "manifest" / "clean_landscape_manifest.csv")
-summary"""
+1. **Raw data collection**: image files under `{rel('data/raw/api')}` and raw manifest `{rel('data/manifest/raw_landscape_manifest.csv')}`.
+2. **Data audit and balancing**: balanced clean manifest `{rel('data/manifest/clean_landscape_manifest.csv')}` and outlier/source report `{rel('reports/metrics/data_balance_report.json')}`.
+3. **Preprocessing**: RGB loading, resize, color conversion, optional spatial `(x, y)` features.
+4. **Training**: K-Means from scratch across `K=2..10`, color spaces `rgb/hsv/lab`, and `use_xy=false/true`.
+5. **Outputs**: segmented figures in `{rel('reports/figures')}`, label arrays in `{rel('data/labels')}`, and model artifacts in `{rel('models')}`.
+6. **Comparison and review**: metrics `{rel('reports/metrics/model_comparison.csv')}`, best model report `{rel('reports/metrics/best_model_by_image.json')}`, and source review `{rel('reports/metrics/source_review.json')}`."""
         ),
         markdown_cell(
-            """## 4. Data Sources and Raw Crawl
+            f"""## 4. Data Audit
 
-The data source is Wikimedia Commons, accessed through official API endpoints rather than arbitrary HTML scraping. The crawler stores source URLs, download URLs, license metadata, author information, dimensions, and local paths.
+The data audit computes width, height, aspect ratio, mean intensity, standard deviation, file size, source, and query for every clean image. IQR and z-score checks identify images that are far from the dataset distribution.
 
-Wikimedia rate-limited repeated image downloads during expansion, so the final clean dataset combines crawled landscape images with deterministic crop/color augmentations derived from those crawled images. Augmented images are explicitly marked as `source=local_augmentation` in the manifest."""
-        ),
-        code_cell(
-            """image_labels["source"].value_counts().rename("image_count").to_frame()"""
-        ),
-        code_cell(
-            """image_labels.head(10)"""
+**Audit summary**
+
+{table_from_records([balance_overview], list(balance_overview.keys()))}
+
+**Feature ranges after balancing**
+
+| Feature | Minimum | Mean | Maximum |
+|---|---:|---:|---:|
+| width | {clean['width'].min()} | {clean['width'].mean():.2f} | {clean['width'].max()} |
+| height | {clean['height'].min()} | {clean['height'].mean():.2f} | {clean['height'].max()} |
+| mean intensity | {clean['mean_intensity'].min():.2f} | {clean['mean_intensity'].mean():.2f} | {clean['mean_intensity'].max():.2f} |
+| std intensity | {clean['std_intensity'].min():.2f} | {clean['std_intensity'].mean():.2f} | {clean['std_intensity'].max():.2f} |"""
         ),
         markdown_cell(
-            """## 5. Data Cleaning Summary
+            f"""## 5. Data Balancing
 
-Images are accepted only if they are readable RGB images, have sufficient dimensions, and are not nearly blank. Every accepted record keeps `dataset_label=landscape` and `image_domain=landscape`."""
-        ),
-        code_cell(
-            """clean_manifest[["image_id", "source", "query", "width", "height", "clean_status", "clean_reason"]].head(12)"""
+The selected training data keeps 20 clean landscape images. The balance rule prioritizes real Wikimedia/raw images, filters extreme quality outliers when enough candidates exist, and caps augmentation at 8 images. In this final run, the pipeline selected **{balance['real_selected']} real images** and **{balance['augmentation_selected']} augmented images**.
+
+**Source distribution**
+
+{df_to_markdown(source_counts)}
+
+**Query distribution**
+
+{df_to_markdown(query_counts)}"""
         ),
         markdown_cell(
-            """## 6. Image EDA / Dataset Summary
+            """## 6. Preprocessing
 
-The final dataset contains 20 clean landscape images. This is enough to compare K-Means behavior across multiple visual conditions while keeping the coursework runtime manageable."""
-        ),
-        code_cell(
-            """eda = clean_manifest.groupby("source").agg(
-    images=("image_id", "count"),
-    min_width=("width", "min"),
-    min_height=("height", "min"),
-    max_width=("width", "max"),
-    max_height=("height", "max"),
-)
-eda"""
+Every selected image is resized to `max_side=128`, then represented in RGB, HSV, or LAB. The experiment also compares two feature modes:
+
+- color-only features: `[c1, c2, c3]`
+- color + spatial features: `[c1, c2, c3, x, y]`
+
+No ground-truth masks, semantic labels, or deep learning segmentation models are used."""
         ),
         markdown_cell(
-            """## 7. Preprocessing
+            f"""## 7. Training Grid
 
-Each landscape image is resized to a maximum side of 128 pixels for retraining. The image is converted into `RGB`, `HSV`, or `LAB`, flattened into `(height * width, n_features)`, and optionally extended with normalized spatial coordinates `(x, y)`."""
-        ),
-        code_cell(
-            """comparison[["image_id", "k", "color_space", "use_xy", "max_side"]].drop_duplicates().head()"""
+The training grid is fixed and reproducible:
+
+| Dimension | Values |
+|---|---|
+| Images | {summary['clean_images']} |
+| K values | {summary['k_values']} |
+| Color spaces | {summary['color_spaces']} |
+| Spatial modes | {summary['use_xy_modes']} |
+| Expected runs | {summary['clean_images']} × {len(summary['k_values'])} × {len(summary['color_spaces'])} × {len(summary['use_xy_modes'])} = {summary['model_runs']} |
+
+Each run saves a segmented image, side-by-side comparison, pixel label array, and `.npz` K-Means artifact."""
         ),
         markdown_cell(
-            """## 8. K-Means Training
+            f"""## 8. Model Comparison
 
-The experiment grid trains K-Means from scratch over:
+The comparison uses unsupervised internal metrics because the assignment does not provide ground-truth segmentation masks.
 
-- `K = 2..10`
-- color spaces: `RGB`, `HSV`, `LAB`
-- spatial features: disabled and enabled
+| Metric | Direction | Meaning |
+|---|---|---|
+| silhouette_sample | higher | better cluster separation |
+| davies_bouldin_sample | lower | lower within/between cluster ratio |
+| calinski_harabasz_sample | higher | stronger between-cluster dispersion |
+| inertia_per_pixel | lower | pixels closer to assigned centroids |
+| cluster_balance | higher | fewer collapsed tiny clusters |
+| ranking_score | lower | combined selection score |
 
-This produces `20 * 9 * 3 * 2 = 1080` model runs."""
-        ),
-        code_cell(
-            """comparison.shape, comparison[["k", "color_space", "use_xy"]].drop_duplicates().shape"""
-        ),
-        markdown_cell(
-            """## 9. Model Comparison
+**Top 15 model runs**
 
-The model comparison table records numerical quality metrics and paths to generated artifacts for every run."""
-        ),
-        code_cell(
-            """comparison.sort_values("ranking_score")[
-    ["image_id", "k", "color_space", "use_xy", "silhouette_sample", "davies_bouldin_sample", "inertia_per_pixel", "cluster_balance", "ranking_score"]
-].head(15)"""
+{df_to_markdown(comparison.sort_values('ranking_score')[['image_id','k','color_space','use_xy','silhouette_sample','davies_bouldin_sample','inertia_per_pixel','cluster_balance','ranking_score']].head(15))}"""
         ),
         markdown_cell(
-            """## 10. Best Model Selection
+            f"""## 9. Best Model Selection
 
-For each image, the selected model is the configuration with the lowest `ranking_score`. This favors compact, separated clusters while penalizing collapsed or highly imbalanced cluster assignments."""
-        ),
-        code_cell(
-            """best = comparison.sort_values("ranking_score").groupby("image_id").head(1)
-best[["image_id", "k", "color_space", "use_xy", "silhouette_sample", "davies_bouldin_sample", "ranking_score", "output_comparison"]]"""
+The best model for each image is the run with the lowest `ranking_score`. This balances separation, compactness, and cluster stability.
+
+{df_to_markdown(best[['image_id','k','color_space','use_xy','silhouette_sample','davies_bouldin_sample','ranking_score']])}"""
         ),
         markdown_cell(
-            """## 11. Output Images After Training
+            f"""## 10. Best Output Image Gallery
 
-The pipeline exports segmented images, side-by-side comparison figures, K-grid figures, pixel label arrays, and `.npz` model artifacts."""
-        ),
-        code_cell(
-            """for path in best["output_comparison"].head(5):
-    display(Image(filename=path))"""
+These figures show the best-ranked side-by-side output for each selected image.
+
+{gallery_table(best, 'output_comparison', ['image_id','k','color_space','use_xy','ranking_score'], width=220)}"""
         ),
         markdown_cell(
-            """## 12. UI Usage
+            f"""## 11. K-Grid Highlights
 
-The Streamlit UI lets a user upload a landscape image, choose `K`, select a color space, toggle spatial features, and inspect clustering metrics after segmentation.
+K-grid figures compare how segmentation changes as `K` increases.
 
-Run:
-
-```bash
-streamlit run app.py
-```"""
+{''.join(f'<p>{image_tag(path, width=260)}<br>{Path(path).name}</p>\\n' for path in grid_paths[:24])}"""
         ),
         markdown_cell(
-            """## 13. Source Review and Final Alignment
+            f"""## 12. Output Image Gallery - All Trained Figures
 
-The final review checks source compilation, tests, notebook JSON/AST validity, metrics files, generated figures, pixel labels, model artifacts, and assignment alignment."""
-        ),
-        code_cell(
-            """review"""
+This appendix lists every trained side-by-side comparison image generated by the retraining workflow.
+
+{gallery_table(all_outputs, 'output_comparison', ['image_id','k','color_space','use_xy'], width=150)}"""
         ),
         markdown_cell(
-            """## 14. Conclusion
+            f"""## 13. Final Review
 
-The improved project remains aligned with the K-Means Image Segmentation exercise. It uses landscape images, expands the clean dataset to 20 images, retrains 1080 K-Means configurations, compares models with unsupervised metrics, and exports visual artifacts for inspection. It does not use supervised segmentation masks, object detection, or deep learning segmentation models."""
+The review script checks data balance, expected model-run count, metric completeness, artifact existence, notebook structure, and assignment alignment.
+
+| Check | Result |
+|---|---|
+| clean images | {review.get('clean_images', summary['clean_images'])} |
+| model runs | {review.get('model_runs', summary['model_runs'])} |
+| expected model runs | {review.get('expected_model_runs', summary['model_runs'])} |
+| assignment alignment | {review.get('alignment', 'K-Means image segmentation with landscape images')} |
+
+The final notebook has no code cells. The project remains aligned with the original K-Means Image Segmentation exercise: load image, convert color space, resize, flatten pixels, cluster by K-Means, reconstruct segmented image, and visualize original versus segmented output."""
         ),
     ]
     notebook = {
