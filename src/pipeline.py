@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import shutil
 from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +13,7 @@ from sklearn.metrics import calinski_harabasz_score, davies_bouldin_score, silho
 
 from .cleaning import (
     augment_clean_records_to_target,
+    audit_and_balance_records,
     clean_manifest_records,
     create_image_label_file,
     image_quality_summary,
@@ -80,8 +83,15 @@ def _parse_csv_values(value: str, cast=str) -> list:
 
 
 def _clear_directory(path: Path) -> None:
+    def onexc(func, target, exc_info):
+        try:
+            os.chmod(target, 0o700)
+            func(target)
+        except Exception:
+            raise exc_info[1]
+
     if path.exists():
-        shutil.rmtree(path)
+        shutil.rmtree(path, onexc=onexc)
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -100,6 +110,46 @@ def reset_generated_outputs(project_root: str | Path, keep_raw_data: bool = True
         if project_root not in resolved.parents and resolved != project_root:
             raise ValueError(f"Refusing to clear path outside project root: {target}")
         _clear_directory(resolved)
+
+
+def add_existing_raw_image_records(raw_records: list[dict], raw_dir: str | Path) -> list[dict]:
+    """Add already-downloaded raw images that are not present in the manifest."""
+    raw_dir = Path(raw_dir)
+    records = list(raw_records)
+    seen_paths = {str(Path(record.get("local_path", "")).resolve()) for record in records if record.get("local_path")}
+    seen_ids = {record.get("image_id", "") for record in records}
+    for path in sorted(raw_dir.glob("*")):
+        if not path.is_file() or path.suffix.lower() not in {".jpg", ".jpeg", ".png"}:
+            continue
+        resolved = str(path.resolve())
+        if resolved in seen_paths:
+            continue
+        image_id = path.stem
+        if image_id in seen_ids:
+            counter = 2
+            while f"{image_id}_{counter}" in seen_ids:
+                counter += 1
+            image_id = f"{image_id}_{counter}"
+        records.append(
+            {
+                "image_id": image_id,
+                "source": "wikimedia_existing_raw",
+                "query": "existing raw landscape",
+                "source_url": "",
+                "download_url": "",
+                "license": "See original Wikimedia source if available",
+                "author": "",
+                "width": "",
+                "height": "",
+                "local_path": str(path),
+                "downloaded_at": datetime.now(timezone.utc).isoformat(),
+                "image_domain": "landscape",
+                "dataset_label": "landscape",
+            }
+        )
+        seen_paths.add(resolved)
+        seen_ids.add(image_id)
+    return records
 
 
 def collect_expanded_landscape_images(
@@ -343,6 +393,7 @@ def run_full_pipeline(
     skip_download: bool = False,
     queries: list[str] | None = None,
     target_clean: int = 20,
+    max_augmentation: int = 8,
     per_query_limit: int = 5,
     use_xy_modes: list[bool] | None = None,
     metric_sample_size: int = 1500,
@@ -372,12 +423,22 @@ def run_full_pipeline(
             preferred_source=source,
         )
         build_landscape_manifest(raw_records, raw_manifest)
+    raw_records = add_existing_raw_image_records(raw_records, raw_dir)
+    build_landscape_manifest(raw_records, raw_manifest)
 
     clean_manifest = manifest_dir / "clean_landscape_manifest.csv"
     clean_records = clean_manifest_records(raw_records, clean_dir, clean_manifest)
     if len(clean_records) < target_clean:
         clean_records = augment_clean_records_to_target(clean_records, target_clean, clean_dir)
         write_clean_manifest(clean_records, clean_manifest)
+    balance_report = metrics_dir / "data_balance_report.json"
+    clean_records = audit_and_balance_records(
+        clean_records,
+        target_count=target_clean,
+        max_augmentation=max_augmentation,
+        output_report=balance_report,
+    )
+    write_clean_manifest(clean_records, clean_manifest)
     create_image_label_file(clean_records, labels_dir / "image_labels.csv")
 
     if len(clean_records) > target_clean:
@@ -407,6 +468,7 @@ def run_full_pipeline(
         "raw_images": len(raw_records),
         "clean_images": len(clean_records),
         "target_clean_images": target_clean,
+        "max_augmentation": max_augmentation,
         "image_quality": image_quality_summary(clean_records),
         "k_values": k_values,
         "color_spaces": color_spaces,
@@ -416,6 +478,7 @@ def run_full_pipeline(
         "comparison_file": str(metrics_dir / "model_comparison.csv"),
         "best_model_file": str(best_path),
         "image_label_file": str(labels_dir / "image_labels.csv"),
+        "data_balance_report": str(balance_report),
     }
     (metrics_dir / "workflow_summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     return summary

@@ -1,0 +1,360 @@
+{
+  "target_count": 20,
+  "max_augmentation": 8,
+  "input_records": 22,
+  "selected_records": 20,
+  "real_selected": 20,
+  "augmentation_selected": 0,
+  "feature_stats": {
+    "width": {
+      "mean": 2948.681818181818,
+      "std": 2113.3475897551657,
+      "q1": 1920.0,
+      "q3": 4229.5,
+      "iqr_lower": -1544.25,
+      "iqr_upper": 7693.75
+    },
+    "height": {
+      "mean": 2036.1818181818182,
+      "std": 1563.0150245413988,
+      "q1": 1161.75,
+      "q3": 2881.25,
+      "iqr_lower": -1417.5,
+      "iqr_upper": 5460.5
+    },
+    "aspect_ratio": {
+      "mean": 1.5384931363636367,
+      "std": 0.4720172382906924,
+      "q1": 1.42104625,
+      "q3": 1.5898387500000002,
+      "iqr_lower": 1.1678574999999998,
+      "iqr_upper": 1.8430275000000003
+    },
+    "mean_intensity": {
+      "mean": 106.87452727272729,
+      "std": 25.50892195461284,
+      "q1": 86.83015,
+      "q3": 127.6773,
+      "iqr_lower": 25.559425000000005,
+      "iqr_upper": 188.948025
+    },
+    "std_intensity": {
+      "mean": 57.1497409090909,
+      "std": 8.94033325251658,
+      "q1": 49.933,
+      "q3": 64.43742499999999,
+      "iqr_lower": 28.176362500000014,
+      "iqr_upper": 86.19406249999997
+    },
+    "file_size_bytes": {
+      "mean": 7150111.318181818,
+      "std": 11226090.315266917,
+      "q1": 365950.25,
+      "q3": 8894394.5,
+      "iqr_lower": -12426716.125,
+      "iqr_upper": 21687060.875
+    }
+  },
+  "kept": [
+    {
+      "image_id": "Algoma_Gabrielle_Rock_I0012362_jpg",
+      "source": "wikimedia_commons_category",
+      "query": "Landscape photographs",
+      "width": 1920,
+      "height": 1149,
+      "aspect_ratio": 1.671018,
+      "mean_intensity": 132.1622,
+      "std_intensity": 67.8889,
+      "file_size_bytes": 530226,
+      "outlier_features": []
+    },
+    {
+      "image_id": "jpg",
+      "source": "wikimedia_commons_category",
+      "query": "Desert landscapes",
+      "width": 1280,
+      "height": 721,
+      "aspect_ratio": 1.775312,
+      "mean_intensity": 103.0914,
+      "std_intensity": 57.1188,
+      "file_size_bytes": 89803,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Wooden_staircase_steps_in_the_forest_of_Hallasan_Park_Eorimok_Trail_at_dusk_on_J",
+      "source": "wikimedia_commons",
+      "query": "forest landscape",
+      "width": 1920,
+      "height": 1297,
+      "aspect_ratio": 1.480339,
+      "mean_intensity": 79.4563,
+      "std_intensity": 56.9932,
+      "file_size_bytes": 1221609,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Bontecou_Lake_Milky_Way_panorama_jpg",
+      "source": "wikimedia_commons",
+      "query": "lake landscape",
+      "width": 1920,
+      "height": 787,
+      "aspect_ratio": 2.439644,
+      "mean_intensity": 86.2949,
+      "std_intensity": 45.959,
+      "file_size_bytes": 438563,
+      "outlier_features": [
+        "aspect_ratio"
+      ]
+    },
+    {
+      "image_id": "Parasols_Evening_Beach_Rincon_de_la_Victoria_Andalusia_Spain_jpg",
+      "source": "wikimedia_commons",
+      "query": "beach landscape",
+      "width": 1920,
+      "height": 1278,
+      "aspect_ratio": 1.502347,
+      "mean_intensity": 133.7445,
+      "std_intensity": 47.3073,
+      "file_size_bytes": 949662,
+      "outlier_features": []
+    },
+    {
+      "image_id": "004_Chital_in_Keoladeo_National_Park_Photo_by_Giles_Laurent_jpg",
+      "source": "wikimedia_commons",
+      "query": "national park",
+      "width": 1920,
+      "height": 1280,
+      "aspect_ratio": 1.5,
+      "mean_intensity": 113.2413,
+      "std_intensity": 63.7322,
+      "file_size_bytes": 879977,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Barn_on_Mastl_mountain_Gherd_ina_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 7000,
+      "height": 4667,
+      "aspect_ratio": 1.499893,
+      "mean_intensity": 151.0594,
+      "std_intensity": 64.4644,
+      "file_size_bytes": 28514252,
+      "outlier_features": [
+        "file_size_bytes"
+      ]
+    },
+    {
+      "image_id": "Beech_Forest_AU_Great_Otway_National_Park_Beauchamp_Falls_--_2019_--_1271_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 6508,
+      "height": 4339,
+      "aspect_ratio": 1.499885,
+      "mean_intensity": 80.0369,
+      "std_intensity": 68.3235,
+      "file_size_bytes": 26867837,
+      "outlier_features": [
+        "file_size_bytes"
+      ]
+    },
+    {
+      "image_id": "C_sar_van_Loo_1743-1821_-_Sunset_Landscape_-_609014_-_National_Trust_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1075,
+      "height": 1200,
+      "aspect_ratio": 0.895833,
+      "mean_intensity": 101.4928,
+      "std_intensity": 64.3565,
+      "file_size_bytes": 169504,
+      "outlier_features": [
+        "aspect_ratio"
+      ]
+    },
+    {
+      "image_id": "Carl_Spitzweg_1808-1885_-_Mountain_Landscape_-_WA1954_70_164_-_Ashmolean_Museum_",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 944,
+      "height": 663,
+      "aspect_ratio": 1.423831,
+      "mean_intensity": 130.3692,
+      "std_intensity": 50.4343,
+      "file_size_bytes": 101911,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Castle_Mountain_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 4928,
+      "height": 3264,
+      "aspect_ratio": 1.509804,
+      "mean_intensity": 89.9962,
+      "std_intensity": 56.2724,
+      "file_size_bytes": 11441203,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Catoctin_Mountain_and_farm_MD1_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 7580,
+      "height": 4476,
+      "aspect_ratio": 1.693476,
+      "mean_intensity": 74.5395,
+      "std_intensity": 49.7659,
+      "file_size_bytes": 28466405,
+      "outlier_features": [
+        "file_size_bytes"
+      ]
+    },
+    {
+      "image_id": "Gillis_van_Coninxloo_-_Forest_Landscape_-_38_70_-_Detroit_Institute_of_Arts_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1920,
+      "height": 1352,
+      "aspect_ratio": 1.420118,
+      "mean_intensity": 115.8098,
+      "std_intensity": 77.3902,
+      "file_size_bytes": 530045,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Gyps_rueppellii_-Nairobi_National_Park_Kenya-8-4c_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 2134,
+      "height": 1733,
+      "aspect_ratio": 1.231391,
+      "mean_intensity": 129.5507,
+      "std_intensity": 47.9234,
+      "file_size_bytes": 924207,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Painting_of_Maharaja_Ranjit_Singh_seated_and_wearing_red_robe_with_natural_scene",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 720,
+      "height": 866,
+      "aspect_ratio": 0.831409,
+      "mean_intensity": 105.5161,
+      "std_intensity": 55.8256,
+      "file_size_bytes": 119784,
+      "outlier_features": [
+        "aspect_ratio"
+      ]
+    },
+    {
+      "image_id": "Pirogue_and_boat_on_the_Mekong_with_colorful_sky_at_sunset_in_Luang_Prabang_Laos",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1920,
+      "height": 1200,
+      "aspect_ratio": 1.6,
+      "mean_intensity": 122.0571,
+      "std_intensity": 65.2163,
+      "file_size_bytes": 588983,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Ruisseau_du_Vialais_-_March_2021_-_B_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1920,
+      "height": 1281,
+      "aspect_ratio": 1.498829,
+      "mean_intensity": 65.8698,
+      "std_intensity": 54.264,
+      "file_size_bytes": 1253969,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Shishkin_Ivan_-_Morning_in_a_Pine_Forest_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1920,
+      "height": 1301,
+      "aspect_ratio": 1.475788,
+      "mean_intensity": 88.4359,
+      "std_intensity": 53.4839,
+      "file_size_bytes": 1138042,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Sunset_by_Caspar_David_Friedrich_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 1920,
+      "height": 1540,
+      "aspect_ratio": 1.246753,
+      "mean_intensity": 77.8836,
+      "std_intensity": 44.5858,
+      "file_size_bytes": 341746,
+      "outlier_features": []
+    },
+    {
+      "image_id": "Wind_Mountain_Columbia_R_-_NARA_-_102278851_page_1_png",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 5609,
+      "height": 3597,
+      "aspect_ratio": 1.559355,
+      "mean_intensity": 164.67,
+      "std_intensity": 50.6668,
+      "file_size_bytes": 21904461,
+      "outlier_features": [
+        "file_size_bytes"
+      ]
+    }
+  ],
+  "excluded": [
+    {
+      "image_id": "004_Sunrise_at_Serengeti_National_Park_Photo_by_Giles_Laurent_jpg",
+      "source": "wikimedia_commons",
+      "query": "national park",
+      "width": 1920,
+      "height": 614,
+      "aspect_ratio": 3.127036,
+      "mean_intensity": 109.3482,
+      "std_intensity": 46.1896,
+      "file_size_bytes": 284467,
+      "outlier_features": [
+        "aspect_ratio"
+      ]
+    },
+    {
+      "image_id": "Blue_Mountains_National_Park_AU_Three_Sisters_--_2019_--_1987-9_jpg",
+      "source": "wikimedia_existing_raw",
+      "query": "existing raw landscape",
+      "width": 5973,
+      "height": 6191,
+      "aspect_ratio": 0.964788,
+      "mean_intensity": 96.6138,
+      "std_intensity": 69.1323,
+      "file_size_bytes": 30545793,
+      "outlier_features": [
+        "height",
+        "aspect_ratio",
+        "file_size_bytes"
+      ]
+    }
+  ],
+  "source_counts": {
+    "wikimedia_commons": 4,
+    "wikimedia_commons_category": 2,
+    "wikimedia_existing_raw": 14
+  },
+  "query_counts": {
+    "Desert landscapes": 1,
+    "Landscape photographs": 1,
+    "beach landscape": 1,
+    "existing raw landscape": 14,
+    "forest landscape": 1,
+    "lake landscape": 1,
+    "national park": 1
+  }
+}

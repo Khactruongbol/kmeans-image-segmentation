@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import csv
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -19,6 +20,41 @@ def validate_notebook(notebook_path: Path) -> None:
     data = json.loads(notebook_path.read_text(encoding="utf-8"))
     if data.get("nbformat") != 4:
         raise AssertionError("Notebook is not nbformat v4")
+    code_cells = [cell for cell in data.get("cells", []) if cell.get("cell_type") == "code"]
+    if code_cells:
+        raise AssertionError(f"Notebook must be report-only with 0 code cells, found {len(code_cells)}")
+    text = "\n".join("".join(cell.get("source", [])) for cell in data.get("cells", []))
+    required_sections = [
+        "Define Problem - Xác định bài toán",
+        "Assignment Mapping - Đối chiếu yêu cầu đề bài",
+        "Workflow tổng quát",
+        "Kiểm tra và cân bằng dữ liệu",
+        "Dataset sau lọc và đánh nhãn",
+        "Preprocessing",
+        "Training Models",
+        "So sánh mô hình",
+        "Đánh giá mô hình tốt nhất",
+        "Hình ảnh sau khi training model",
+        "Review notebook và source code",
+        "Kết luận",
+    ]
+    missing = [section for section in required_sections if section not in text]
+    if missing:
+        raise AssertionError(f"Notebook missing sections: {missing}")
+    mojibake_markers = ["�", "BÃ", "CÃ", "Ä‘", "áº", "á»", "Æ°"]
+    bad_markers = [marker for marker in mojibake_markers if marker in text]
+    if bad_markers:
+        raise AssertionError(f"Notebook contains likely font/encoding artifacts: {bad_markers}")
+    html_refs = re.findall(r'<img src="([^"]+)"', text)
+    if html_refs:
+        raise AssertionError("Notebook should use Markdown image syntax, not HTML image tags")
+    image_refs = re.findall(r'!\[[^\]]*\]\(([^)]+)\)', text)
+    if len(image_refs) < 10:
+        raise AssertionError("Notebook does not reference any output images")
+    for image_ref in image_refs:
+        image_path = (notebook_path.parent / image_ref).resolve()
+        if not image_path.exists():
+            raise AssertionError(f"Notebook references missing image: {image_ref}")
     for idx, cell in enumerate(data.get("cells", []), start=1):
         if cell.get("cell_type") == "code":
             source = "".join(cell.get("source", []))
@@ -39,6 +75,7 @@ def main() -> None:
         (labels_dir / "image_labels.csv", "image labels"),
         (metrics_dir / "model_comparison.csv", "model comparison"),
         (metrics_dir / "best_model_by_image.json", "best-model report"),
+        (metrics_dir / "data_balance_report.json", "data balance report"),
         (metrics_dir / "workflow_summary.json", "workflow summary"),
         (notebook_path, "Jupyter notebook"),
     ]
@@ -53,6 +90,14 @@ def main() -> None:
         raise AssertionError("No clean landscape images found")
     if summary.get("clean_images", 0) < 20:
         raise AssertionError("Expected at least 20 clean landscape images")
+    if int(summary.get("max_augmentation", 20)) > 8:
+        raise AssertionError("Augmentation cap must be 8 or lower")
+    with (metrics_dir / "data_balance_report.json").open("r", encoding="utf-8") as f:
+        balance_report = json.load(f)
+    if balance_report.get("selected_records") != 20:
+        raise AssertionError("Data balance report must select 20 records")
+    if balance_report.get("augmentation_selected", 99) > 8:
+        raise AssertionError("Balanced data uses too many augmented images")
 
     with (metrics_dir / "model_comparison.csv").open("r", newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
@@ -105,6 +150,7 @@ def main() -> None:
             "segmented images",
             "side-by-side comparisons",
             "K-grid comparisons",
+            "data balance report",
             "Jupyter notebook JSON and code-cell AST",
         ],
     }
