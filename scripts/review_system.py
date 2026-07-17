@@ -25,24 +25,31 @@ def validate_notebook(notebook_path: Path) -> None:
         raise AssertionError(f"Notebook must be report-only with 0 code cells, found {len(code_cells)}")
     text = "\n".join("".join(cell.get("source", [])) for cell in data.get("cells", []))
     required_sections = [
-        "Define Problem",
-        "Assignment Mapping",
-        "Workflow",
-        "Data Audit",
-        "Data Balancing",
+        "Define Problem - Xác định bài toán",
+        "Assignment Mapping - Đối chiếu yêu cầu đề bài",
+        "Workflow tổng quát",
+        "Kiểm tra và cân bằng dữ liệu",
+        "Dataset sau lọc và đánh nhãn",
         "Preprocessing",
-        "Training Grid",
-        "Model Comparison",
-        "Best Model Selection",
-        "Output Image Gallery",
-        "Final Review",
+        "Training Models",
+        "So sánh mô hình",
+        "Đánh giá mô hình tốt nhất",
+        "Hình ảnh sau khi training model",
+        "Review notebook và source code",
+        "Kết luận",
     ]
     missing = [section for section in required_sections if section not in text]
     if missing:
         raise AssertionError(f"Notebook missing sections: {missing}")
-    image_refs = re.findall(r'<img src="([^"]+)"', text)
-    image_refs.extend(re.findall(r'!\[[^\]]*\]\(([^)]+)\)', text))
-    if not image_refs:
+    mojibake_markers = ["�", "BÃ", "CÃ", "Ä‘", "áº", "á»", "Æ°"]
+    bad_markers = [marker for marker in mojibake_markers if marker in text]
+    if bad_markers:
+        raise AssertionError(f"Notebook contains likely font/encoding artifacts: {bad_markers}")
+    html_refs = re.findall(r'<img src="([^"]+)"', text)
+    if html_refs:
+        raise AssertionError("Notebook should use Markdown image syntax, not HTML image tags")
+    image_refs = re.findall(r'!\[[^\]]*\]\(([^)]+)\)', text)
+    if len(image_refs) < 10:
         raise AssertionError("Notebook does not reference any output images")
     for image_ref in image_refs:
         image_path = (notebook_path.parent / image_ref).resolve()

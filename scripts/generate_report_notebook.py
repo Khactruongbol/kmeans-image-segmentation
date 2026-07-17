@@ -4,9 +4,11 @@ import json
 import uuid
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_FIGURES = ROOT / "reports" / "figures"
 
 
 def rel(path: str | Path) -> str:
@@ -28,12 +30,11 @@ def markdown_cell(source: str) -> dict:
     }
 
 
-def table_from_records(records: list[dict], columns: list[str], limit: int | None = None) -> str:
-    rows = records if limit is None else records[:limit]
+def table_from_records(records: list[dict], columns: list[str]) -> str:
     header = "| " + " | ".join(columns) + " |"
     sep = "| " + " | ".join(["---"] * len(columns)) + " |"
     body = []
-    for row in rows:
+    for row in records:
         body.append("| " + " | ".join(str(row.get(col, "")).replace("|", "/") for col in columns) + " |")
     return "\n".join([header, sep, *body])
 
@@ -48,16 +49,68 @@ def md_image(path: str | Path, caption: str) -> str:
     return f"![{safe_caption}]({rel(path)})\n\n*{safe_caption}*"
 
 
-def image_gallery_lines(rows: pd.DataFrame, image_col: str, caption_cols: list[str]) -> str:
+def save_bar_chart(data: pd.Series, title: str, ylabel: str, output_path: Path, color: str = "#4C78A8") -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    data.plot(kind="bar", ax=ax, color=color)
+    ax.set_title(title)
+    ax.set_ylabel(ylabel)
+    ax.set_xlabel("")
+    ax.tick_params(axis="x", rotation=30)
+    ax.grid(axis="y", alpha=0.25)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
+def save_line_chart(data: pd.DataFrame, output_path: Path) -> None:
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig, ax = plt.subplots(figsize=(9, 4.5))
+    for color_space, group in data.groupby("color_space"):
+        ax.plot(group["k"], group["ranking_score"], marker="o", label=color_space.upper())
+    ax.set_title("Average ranking score by K and color space")
+    ax.set_xlabel("K")
+    ax.set_ylabel("Average ranking score (lower is better)")
+    ax.grid(alpha=0.25)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=160)
+    plt.close(fig)
+
+
+def build_report_figures(clean: pd.DataFrame, comparison: pd.DataFrame, best: pd.DataFrame) -> dict[str, Path]:
+    figures = {
+        "source_distribution": REPORT_FIGURES / "report_source_distribution.png",
+        "best_k_distribution": REPORT_FIGURES / "report_best_k_distribution.png",
+        "color_space_comparison": REPORT_FIGURES / "report_color_space_comparison.png",
+        "ranking_by_k": REPORT_FIGURES / "report_ranking_score_by_k.png",
+    }
+
+    save_bar_chart(clean["source"].value_counts(), "Balanced dataset source distribution", "Images", figures["source_distribution"])
+    save_bar_chart(best["k"].value_counts().sort_index(), "Best-model K distribution", "Images", figures["best_k_distribution"], "#F58518")
+
+    color_scores = comparison.groupby("color_space")["ranking_score"].mean().sort_values()
+    save_bar_chart(color_scores, "Average ranking score by color space", "Average ranking score", figures["color_space_comparison"], "#54A24B")
+
+    ranking_by_k = comparison.groupby(["color_space", "k"], as_index=False)["ranking_score"].mean()
+    save_line_chart(ranking_by_k, figures["ranking_by_k"])
+    return figures
+
+
+def best_gallery(best: pd.DataFrame) -> str:
     blocks: list[str] = []
-    for _, row in rows.iterrows():
-        caption = " | ".join(f"{col}={row[col]}" for col in caption_cols)
-        blocks.append(md_image(row[image_col], caption))
+    for _, row in best.iterrows():
+        caption = (
+            f"{row['image_id']} | K={row['k']} | {row['color_space'].upper()} | "
+            f"use_xy={row['use_xy']} | ranking_score={row['ranking_score']:.4f}"
+        )
+        blocks.append(md_image(row["output_comparison"], caption))
     return "\n\n".join(blocks)
 
 
-def chunked(items: list, size: int) -> list[list]:
-    return [items[i : i + size] for i in range(0, len(items), size)]
+def k_grid_gallery(grid_paths: list[Path], limit: int = 6) -> str:
+    selected = grid_paths[:limit]
+    return "\n\n".join(md_image(path, path.name) for path in selected)
 
 
 def main() -> None:
@@ -69,8 +122,9 @@ def main() -> None:
     comparison = pd.read_csv(ROOT / "reports" / "metrics" / "model_comparison.csv")
     clean = pd.read_csv(ROOT / "data" / "manifest" / "clean_landscape_manifest.csv")
     best = comparison.sort_values("ranking_score").groupby("image_id", as_index=False).head(1)
-    all_outputs = comparison.sort_values(["image_id", "color_space", "use_xy", "k"])
-    grid_paths = sorted((ROOT / "reports" / "figures").glob("*_k_grid_*.png"))
+    best = best.sort_values(["ranking_score", "image_id"]).reset_index(drop=True)
+    grid_paths = sorted(REPORT_FIGURES.glob("*_k_grid_*.png"))
+    report_figures = build_report_figures(clean, comparison, best)
 
     balance_overview = {
         "raw_images": summary["raw_images"],
@@ -83,66 +137,95 @@ def main() -> None:
     source_counts = pd.Series(balance["source_counts"], name="count").reset_index().rename(columns={"index": "source"})
     query_counts = pd.Series(balance["query_counts"], name="count").reset_index().rename(columns={"index": "query"})
 
+    top_models = comparison.sort_values("ranking_score")[
+        [
+            "image_id",
+            "k",
+            "color_space",
+            "use_xy",
+            "silhouette_sample",
+            "davies_bouldin_sample",
+            "inertia_per_pixel",
+            "cluster_balance",
+            "ranking_score",
+        ]
+    ].head(12)
+
+    best_table = best[
+        [
+            "image_id",
+            "k",
+            "color_space",
+            "use_xy",
+            "silhouette_sample",
+            "davies_bouldin_sample",
+            "ranking_score",
+        ]
+    ]
+
     cells = [
         markdown_cell(
-            f"""# Báo Cáo Cuối Kỳ - K-Means Image Segmentation
+            """# Báo Cáo Cuối Kỳ - K-Means Image Segmentation
 
-## 1. Define Problem
-
-Bài toán yêu cầu phân đoạn một ảnh thành `K` cụm bằng thuật toán K-Means. Trong chương trình này, ảnh đầu vào là ảnh phong cảnh vì các vùng như bầu trời, nước, cây, núi, cát và mây thường có màu sắc tách biệt rõ, phù hợp với phân cụm màu không giám sát.
-
-Notebook này là bản báo cáo cuối cùng, chỉ dùng Markdown và hình ảnh, có **0 code cell**. Toàn bộ code train, so sánh mô hình, xuất ảnh, xuất nhãn pixel, lưu model artifact và review hệ thống đã được chạy trước khi tạo notebook."""
+Notebook này trình bày lại project theo phong cách các lab trước: nêu bài toán, nguồn dữ liệu, workflow, cân bằng dữ liệu, training, so sánh mô hình, hình ảnh sau training và phần review cuối. Notebook chỉ dùng Markdown và hình ảnh, không chứa code cell."""
         ),
         markdown_cell(
-            """## 2. Assignment Mapping
+            """## 1. Define Problem - Xác định bài toán
+
+Mục tiêu của bài là phân đoạn một ảnh thành `K` cụm bằng thuật toán K-Means. Với mỗi pixel, chương trình dùng đặc trưng màu để gán pixel vào centroid gần nhất, sau đó thay màu pixel bằng màu centroid của cụm.
+
+Project chọn ảnh phong cảnh vì các vùng như trời, núi, cây, nước, cát và mây thường có khác biệt màu rõ ràng, phù hợp với bài toán phân cụm không giám sát. “Độ chính xác” trong report này được hiểu là chất lượng phân cụm nội bộ và kiểm tra trực quan, không phải IoU/Dice vì đề bài không cung cấp ground-truth mask."""
+        ),
+        markdown_cell(
+            """## 2. Assignment Mapping - Đối chiếu yêu cầu đề bài
 
 | Yêu cầu đề bài | Phần đã thực hiện |
 |---|---|
-| Load the image | Đọc ảnh RGB bằng PIL trong `src/image_io.py` |
+| Load the image | Đọc ảnh bằng PIL trong `src/image_io.py` |
 | Convert color space | So sánh `RGB`, `HSV`, `LAB` |
-| Resize image | Resize với `max_side=128` để train nhanh và ổn định |
-| Flatten pixels | Biến ảnh thành ma trận `(height * width, n_features)` |
+| Resize image | Resize về `max_side=128` để train nhanh và ổn định |
+| Flatten pixels | Biến ảnh thành ma trận pixel feature |
 | Apply K-Means | Cài đặt K-Means from scratch bằng NumPy |
-| Assign nearest centroid | Dùng Euclidean distance dạng vector hóa |
+| Assign nearest centroid | Gán pixel theo Euclidean distance |
 | Update centroids | Cập nhật centroid bằng mean của pixel trong cụm |
 | Repeat until convergence | Dừng bằng `max_iter` và `tol` |
-| Segment image | Thay mỗi pixel bằng màu centroid |
-| Visualize results | Xuất ảnh segmented, comparison và K-grid |"""
+| Segment image | Thay màu pixel bằng màu centroid |
+| Visualize results | Xuất segmented image, comparison image và K-grid |"""
         ),
         markdown_cell(
-            f"""## 3. Workflow
+            f"""## 3. Workflow tổng quát và dẫn chứng đã làm
 
-Workflow đã thực hiện:
-
-1. **Thu thập data thô**: ảnh nằm trong `{rel('data/raw/api')}` và manifest `{rel('data/manifest/raw_landscape_manifest.csv')}`.
-2. **Kiểm tra và cân bằng data**: clean manifest `{rel('data/manifest/clean_landscape_manifest.csv')}` và báo cáo `{rel('reports/metrics/data_balance_report.json')}`.
-3. **Tiền xử lý**: đọc ảnh RGB, resize, đổi color space, flatten pixel, tùy chọn thêm tọa độ `(x, y)`.
-4. **Train K-Means**: train trên `K=2..10`, `rgb/hsv/lab`, `use_xy=false/true`.
-5. **Xuất kết quả**: ảnh trong `{rel('reports/figures')}`, labels trong `{rel('data/labels')}`, model artifacts trong `{rel('models')}`.
-6. **So sánh và review**: metrics `{rel('reports/metrics/model_comparison.csv')}`, best model `{rel('reports/metrics/best_model_by_image.json')}`, review `{rel('reports/metrics/source_review.json')}`."""
+1. Thu thập data thô: manifest `{rel('data/manifest/raw_landscape_manifest.csv')}` và ảnh trong `{rel('data/raw/api')}`.
+2. Làm sạch và cân bằng dữ liệu: clean manifest `{rel('data/manifest/clean_landscape_manifest.csv')}` và báo cáo `{rel('reports/metrics/data_balance_report.json')}`.
+3. Tiền xử lý: đọc ảnh RGB, resize, đổi color space, flatten pixel và tùy chọn thêm tọa độ `(x, y)`.
+4. Train K-Means: chạy `K=2..10`, `rgb/hsv/lab`, `use_xy=false/true`.
+5. Xuất output sau training: ảnh trong `{rel('reports/figures')}`, labels trong `{rel('data/labels')}`, model artifacts trong `{rel('models')}`.
+6. So sánh và review: metrics `{rel('reports/metrics/model_comparison.csv')}`, best model `{rel('reports/metrics/best_model_by_image.json')}`, source review `{rel('reports/metrics/source_review.json')}`."""
         ),
         markdown_cell(
-            f"""## 4. Data Audit
+            f"""## 4. Kiểm tra và cân bằng dữ liệu
 
-Hệ thống kiểm tra các đặc trưng của từng ảnh: width, height, aspect ratio, mean intensity, standard deviation, file size, source và query. Các ảnh lệch quá xa phân phối được đánh dấu bằng IQR và z-score trước khi chọn tập balanced.
+Hệ thống audit từng ảnh theo width, height, aspect ratio, mean intensity, standard deviation, file size, source và query. Các ảnh lệch quá xa phân phối được đánh dấu bằng IQR và z-score trước khi chọn tập balanced.
 
-**Tổng quan data sau cân bằng**
+**Tổng quan sau cân bằng**
 
 {table_from_records([balance_overview], list(balance_overview.keys()))}
 
-**Khoảng giá trị sau cân bằng**
+**Khoảng giá trị chính**
 
 | Feature | Min | Mean | Max |
 |---|---:|---:|---:|
 | width | {clean['width'].min()} | {clean['width'].mean():.2f} | {clean['width'].max()} |
 | height | {clean['height'].min()} | {clean['height'].mean():.2f} | {clean['height'].max()} |
 | mean intensity | {clean['mean_intensity'].min():.2f} | {clean['mean_intensity'].mean():.2f} | {clean['mean_intensity'].max():.2f} |
-| std intensity | {clean['std_intensity'].min():.2f} | {clean['std_intensity'].mean():.2f} | {clean['std_intensity'].max():.2f} |"""
+| std intensity | {clean['std_intensity'].min():.2f} | {clean['std_intensity'].mean():.2f} | {clean['std_intensity'].max():.2f} |
+
+{md_image(report_figures['source_distribution'], 'Balanced dataset source distribution')}"""
         ),
         markdown_cell(
-            f"""## 5. Data Balancing
+            f"""## 5. Dataset sau lọc và đánh nhãn
 
-Mục tiêu là giữ `20` ảnh sạch, giảm lệ thuộc augmentation và ưu tiên ảnh real/raw từ Wikimedia. Kết quả cuối cùng chọn **{balance['real_selected']} ảnh real** và **{balance['augmentation_selected']} ảnh augmentation**.
+Dataset cuối cùng giữ **{balance['selected_records']} ảnh clean**, trong đó có **{balance['real_selected']} ảnh real** và **{balance['augmentation_selected']} ảnh augmentation**. Nhãn metadata vẫn là `dataset_label=landscape` và `image_domain=landscape`. Nhãn pixel-level là cluster label sinh ra sau K-Means, không dùng mask giám sát.
 
 **Phân phối source**
 
@@ -155,12 +238,12 @@ Mục tiêu là giữ `20` ảnh sạch, giảm lệ thuộc augmentation và ư
         markdown_cell(
             """## 6. Preprocessing
 
-Mỗi ảnh được resize về `max_side=128`, sau đó thử nghiệm trên ba không gian màu `RGB`, `HSV`, `LAB`. Mỗi pixel trở thành vector đặc trưng màu. Ở chế độ spatial, vector được mở rộng thêm tọa độ chuẩn hóa `(x, y)`.
+Mỗi ảnh được resize về `max_side=128`, chuyển sang `RGB`, `HSV` hoặc `LAB`, sau đó flatten thành vector pixel. Với chế độ spatial, vector pixel được mở rộng thêm tọa độ chuẩn hóa `(x, y)` để segmentation ổn định hơn ở các vùng ảnh gần nhau.
 
-Không dùng mask ground-truth, semantic segmentation, object detection hoặc deep learning model. Đây vẫn là bài toán K-Means Image Segmentation đúng trọng tâm đề bài."""
+Project không dùng supervised mask, object detection, U-Net, SAM, Mask R-CNN hoặc mô hình deep learning. Phạm vi vẫn đúng với K-Means Image Segmentation."""
         ),
         markdown_cell(
-            f"""## 7. Training Grid
+            f"""## 7. Training Models
 
 | Thành phần | Giá trị |
 |---|---|
@@ -170,12 +253,12 @@ Không dùng mask ground-truth, semantic segmentation, object detection hoặc d
 | Spatial modes | {summary['use_xy_modes']} |
 | Tổng số model runs | {summary['model_runs']} |
 
-Mỗi model run đều xuất ra ảnh segmented, ảnh comparison, pixel-label `.npy`, và model artifact `.npz`."""
+Mỗi model run tạo đầy đủ segmented image, side-by-side comparison image, pixel-label `.npy`, và model artifact `.npz`."""
         ),
         markdown_cell(
-            f"""## 8. Model Comparison
+            f"""## 8. So sánh mô hình
 
-Vì đề bài không cung cấp ground-truth segmentation mask, chất lượng model được đánh giá bằng unsupervised metrics:
+Vì bài toán không có ground-truth mask, mô hình được so sánh bằng internal unsupervised metrics và visual review. Report không giải thích từng giá trị `K` riêng lẻ; thay vào đó dùng ranking tổng hợp và các biểu đồ đại diện.
 
 | Metric | Hướng tốt hơn | Ý nghĩa |
 |---|---|---|
@@ -183,59 +266,47 @@ Vì đề bài không cung cấp ground-truth segmentation mask, chất lượng
 | davies_bouldin_sample | thấp hơn | Cụm gọn và ít chồng lấn hơn |
 | calinski_harabasz_sample | cao hơn | Cụm tách biệt tốt hơn |
 | inertia_per_pixel | thấp hơn | Pixel gần centroid hơn |
-| cluster_balance | cao hơn | Tránh cụm quá nhỏ/collapsed |
+| cluster_balance | cao hơn | Tránh cụm quá nhỏ hoặc collapsed |
 | ranking_score | thấp hơn | Điểm tổng hợp để chọn model |
 
-**Top 15 model runs**
+{md_image(report_figures['ranking_by_k'], 'Average ranking score by K and color space')}
 
-{df_to_markdown(comparison.sort_values('ranking_score')[['image_id','k','color_space','use_xy','silhouette_sample','davies_bouldin_sample','inertia_per_pixel','cluster_balance','ranking_score']].head(15))}"""
+{md_image(report_figures['color_space_comparison'], 'Average ranking score by color space')}
+
+**Top 12 model runs theo ranking score**
+
+{df_to_markdown(top_models)}"""
         ),
         markdown_cell(
-            f"""## 9. Best Model Selection
+            f"""## 9. Đánh giá mô hình tốt nhất
 
-Với mỗi ảnh, model tốt nhất là cấu hình có `ranking_score` thấp nhất.
+Với mỗi ảnh, model tốt nhất là cấu hình có `ranking_score` thấp nhất. Bảng dưới đây là cấu hình best-model theo từng ảnh.
 
-{df_to_markdown(best[['image_id','k','color_space','use_xy','silhouette_sample','davies_bouldin_sample','ranking_score']])}"""
+{md_image(report_figures['best_k_distribution'], 'Best-model K distribution')}
+
+{df_to_markdown(best_table)}"""
         ),
         markdown_cell(
-            f"""## 10. Hình Ảnh Model Tốt Nhất Sau Khi Train - Best Output Image Gallery
+            f"""## 10. Hình ảnh sau khi training model
 
-Phần này nhúng trực tiếp ảnh comparison của model tốt nhất cho từng ảnh. Đây là các hình sau khi train, gồm ảnh gốc và ảnh đã segment đặt cạnh nhau.
+Các hình dưới đây là output comparison sau training, gồm ảnh gốc và ảnh đã segment đặt cạnh nhau. Report chỉ đưa best-model gallery để notebook gọn và dễ review; toàn bộ 1080 ảnh output vẫn nằm trong `{rel('reports/figures')}`.
 
-{image_gallery_lines(best, 'output_comparison', ['image_id','k','color_space','use_xy','ranking_score'])}"""
+{best_gallery(best)}"""
         ),
         markdown_cell(
-            "## 11. K-Grid Highlights\n\nCác hình K-grid dưới đây cho thấy kết quả segmentation thay đổi như thế nào khi tăng `K`."
+            f"""## 11. K-grid highlights
+
+K-grid giúp kiểm tra trực quan việc tăng `K` ảnh hưởng đến segmentation như thế nào. Phần này chỉ chọn một số hình đại diện, không giải thích từng `K`.
+
+{k_grid_gallery(grid_paths)}"""
         ),
-    ]
-
-    for i, group in enumerate(chunked(grid_paths, 12), start=1):
-        body = [f"### 11.{i}. K-Grid Batch {i}"]
-        for path in group:
-            body.append(md_image(path, Path(path).name))
-        cells.append(markdown_cell("\n\n".join(body)))
-
-    cells.append(
         markdown_cell(
-            """## 12. Tất Cả Hình Ảnh Model Sau Khi Train - Output Image Gallery
+            """## 12. Giao diện chương trình
 
-Phần appendix dưới đây nhúng trực tiếp toàn bộ ảnh comparison đã train. Mỗi ảnh là một cấu hình model cụ thể gồm `image_id`, `K`, `color_space`, và `use_xy`.
-
-Ghi chú: số lượng ảnh lớn vì workflow đã train đủ `20 × 9 × 3 × 2 = 1080` cấu hình."""
-        )
-    )
-
-    for i, image_group in enumerate(chunked(list(all_outputs.iterrows()), 36), start=1):
-        group_df = pd.DataFrame([row for _, row in image_group])
-        body = [f"### 12.{i}. Trained Output Batch {i}"]
-        body.append(image_gallery_lines(group_df, "output_comparison", ["image_id", "k", "color_space", "use_xy"]))
-        cells.append(markdown_cell("\n\n".join(body)))
-
-    cells.append(
+Giao diện Python dùng Streamlit trong `app.py`. Người dùng có thể upload ảnh, chọn `K`, chọn color space, bật/tắt `use_xy`, sau đó xem ảnh segmentation và metrics sau khi chạy."""
+        ),
         markdown_cell(
-            f"""## 13. Final Review
-
-Kết quả review cuối:
+            f"""## 13. Review notebook và source code
 
 | Check | Result |
 |---|---|
@@ -246,9 +317,14 @@ Kết quả review cuối:
 | notebook code cells | 0 |
 | assignment alignment | {review.get('alignment', 'K-Means image segmentation with landscape images')} |
 
-Notebook đã được review để đảm bảo không có code cell, không có lỗi font do encoding, và các ảnh output sau train được nhúng bằng Markdown image syntax chuẩn."""
-        )
-    )
+Notebook được tạo lại dưới dạng markdown-only, dùng UTF-8, dùng Markdown image syntax chuẩn và chỉ nhúng hình output sau training theo hướng tổng hợp. Source review kiểm tra manifest, metrics, labels, model artifacts, hình ảnh output và alignment với đề bài."""
+        ),
+        markdown_cell(
+            """## 14. Kết luận
+
+Chương trình đã hoàn thành đúng trọng tâm đề bài: load ảnh, tiền xử lý màu, flatten pixel, train K-Means, gán cụm, cập nhật centroid, segment ảnh và trực quan hóa kết quả. Dataset đã được cân bằng lại trước khi train, model được so sánh bằng metrics không giám sát, và notebook cuối cùng trình bày kết quả theo phong cách report lab thay vì liệt kê toàn bộ từng cấu hình `K`."""
+        ),
+    ]
 
     notebook = {
         "cells": cells,
@@ -259,7 +335,6 @@ Notebook đã được review để đảm bảo không có code cell, không c�
         "nbformat": 4,
         "nbformat_minor": 5,
     }
-    notebook_path = ROOT / "notebooks" / "01_kmeans_image_segmentation_report.ipynb"
     notebook_path.write_text(json.dumps(notebook, indent=2, ensure_ascii=False), encoding="utf-8")
     print(str(notebook_path).encode("unicode_escape").decode("ascii"))
 

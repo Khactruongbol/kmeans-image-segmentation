@@ -23,9 +23,10 @@ streamlit run app.py
 - Best model report: `reports/metrics/best_model_by_image.json`
 - Data balance report: `reports/metrics/data_balance_report.json`
 - Workflow summary: `reports/metrics/workflow_summary.json`
-- Notebook report: `notebooks/01_kmeans_image_segmentation_report.ipynb` (markdown-only, 0 code cells)
+- Notebook report: `notebooks/01_kmeans_image_segmentation_report.ipynb` (lab-style, markdown-only, 0 code cells)
+- Report summary figures: `reports/figures/report_*.png`
 
 ## GitHub
 
 Target public repository: `kmeans-image-segmentation`
-Working branch: `codex/data-balance-review`
+Working branch: `codex/report-trained-images-review`
